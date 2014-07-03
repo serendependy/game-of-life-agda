@@ -25,8 +25,8 @@ ShowGrid = simpleShowInstance showGrid
 
 run : ∀ {m n} → Grid m n → Nat → IO Unit 
 run g zero = putStrLn (show g)
-run g (suc n) = putStrLn (show g) >>= 
-                (λ _ → run (update-grid g) n)
+run g (suc n) = putStrLn (show g)
+            >>= λ _ → run (update-grid g) n
 
 module ParseGOL where
   eqCell : (c₁ c₂ : Cell) → Dec (c₁ ≡ c₂)
@@ -51,9 +51,18 @@ module ParseGOL where
   lex : String → List Cell
   lex = concatMap (maybe [] [_]) ∘ tokenize cellTokenSpecs ∘ unpackString
 
+private
+  liftM : ∀ {a} {A : Set a} → Maybe A → String → Either String A
+  liftM nothing  str = left str
+  liftM (just x) str = right x
 
-readGOLText' : String → Either String (Σ Nat SqGrid)
-readGOLText' s = case lines s of
+  liftD : ∀ {a} {A : Set a} → Dec A → String → Either String A
+  liftD (yes x) _   = right x
+  liftD (no  _) str = left str
+
+
+readGOLFile : String → Either String (Σ Nat SqGrid)
+readGOLFile s = case lines s of
   λ { [] → left "Nothing in file!" 
     ; (l ∷ ls') → liftM (parseNat l) "Invalid number"
       >>= λ n → liftD (length ls' == n) "rows ≠ header"
@@ -61,14 +70,6 @@ readGOLText' s = case lines s of
       >>= λ vstr → strToVecEither n (vmap ParseGOL.lex vstr) 
       >>= λ g → return (n , subst (λ n' → Grid n' n) (length ls') n eq g) }
   where
-    liftM : ∀ {a} {A : Set a} → Maybe A → String → Either String A
-    liftM nothing  str = left str
-    liftM (just x) str = right x
-
-    liftD : ∀ {a} {A : Set a} → Dec A → String → Either String A
-    liftD (yes x) _   = right x
-    liftD (no  _) str = left str
-
     strToVecEither : ∀ {m} n → Vec (List Cell) m → Either String (Grid m n)
     strToVecEither n [] = right []
     strToVecEither {suc m} n (xs ∷ vstr) =
@@ -77,14 +78,19 @@ readGOLText' s = case lines s of
       >>= λ vxs → strToVecEither n vstr 
       >>= λ g   → return ((subst (Vec Cell) (length xs) n eq vxs) ∷ g)
 
+
+checkGOLArgs : String → String → Either String (Nat × (Σ Nat SqGrid))
+checkGOLArgs stepsTxt file =
+      liftM (parseNat stepsTxt) "STEPS must be valid!" 
+  >>= λ steps → readGOLFile file 
+  >>= λ { (n , g) → return (steps , (n , g)) }
+
+
 main : IO Unit
 main = getArgs >>= 
-  λ { (file ∷ [ header ]) → 
-       readFile file 
-       >>= λ ftext → case parseNat header of 
-         λ { nothing  → putStrLn "STEPS must be valid" 
-           ; (just steps) → case readGOLText' ftext of 
-             λ { (left  err) → putStrLn err 
-               ; (right (n , g)) → run g steps }}
+  λ { (file ∷ [ stepsTxt ]) → readFile file 
+       >>= λ ftext → case checkGOLArgs stepsTxt ftext of 
+       λ { (left err) → putStrLn err
+         ; (right (steps , dim , grid)) → run grid steps }
   ; _ → getProgName 
     >>= λ p → putStrLn ("Usage: " & p & "FILE STEPS") }

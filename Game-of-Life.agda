@@ -48,7 +48,7 @@ hshift : ∀ {m n} → Grid m n → Dir → Grid m n
 hshift g d = vmap (shift₁ d dead) g
 
 vshift : ∀ {m n} → Grid m n → Dir → Grid m n
-vshift g d = shift₁ d (tabulate (λ _ → dead)) g
+vshift g d = shift₁ d (pure dead) g
 
 -- shift the entire grid
 shiftGrid : ∀ {m n} → Grid m n → (Dir × Dir) → Grid m n
@@ -70,9 +70,9 @@ neighbor-shifts : ∀ {m n} → Grid m n → Vec (Grid m n) 8
 neighbor-shifts g = vtail (all-shifts g)
 
 neighbor-count : ∀ {m n} → CellLoc m n → Grid m n → Nat
-neighbor-count l g = vfold (λ _ → Nat) _+_ 0
-  (vmap (λ g' → cellToNat $ lookup-grid l g')
-        (neighbor-shifts g))
+neighbor-count l g = vfold (λ _ → Nat) _+_ 0 $
+  vmap (λ g' → cellToNat $ lookup-grid l g')
+       (neighbor-shifts g)
 
 -- rules of the game
 update' : Cell → Nat → Cell
